@@ -270,11 +270,11 @@ func (sdr *sdrData) emit() bool {
 
 			out, err := json.Marshal(sensor)
 			if err != nil {
-				log.Panicf("emit: %v", err)
+				log.Panicf("sdr: emit: %v", err)
 			}
 
 			topic := sdr.sdrCfg.Topic + strconv.Itoa(sensor.id)
-			log.Infof("emit: %s: %s", topic, out)
+			log.Infof("sdr: emit: %s: %s", topic, out)
 
 			// Fire off another goroutine to send since this is blocking consume()
 			go func() {

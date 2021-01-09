@@ -25,12 +25,10 @@ type localImageImpl struct {
 	cfg  LocalImagesConfig
 }
 
-func initLocalImages(bmux BrokerMux, cfgs []LocalImagesConfig) {
-	for _, cfg := range cfgs {
-		if len(cfg.Topic) > 0 && len(cfg.Sources) > 0 {
-			i := &localImageImpl{bmux: bmux, cfg: cfg}
-			go i.loop()
-		}
+func initLocalImages(bmux BrokerMux, cfg LocalImagesConfig) {
+	if len(cfg.Topic) > 0 && len(cfg.Sources) > 0 {
+		i := &localImageImpl{bmux: bmux, cfg: cfg}
+		go i.loop()
 	}
 }
 

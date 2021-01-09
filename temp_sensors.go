@@ -48,7 +48,7 @@ type tempSensorsImpl struct {
 func initTempSensors(bmux BrokerMux, cfgs []TempSensorConfig) {
 
 	// offsetJobRunner so this all gets scheduled at the right wall clock time
-	runner := newOffsetJobRunner("tempSensors")
+	runner := newOffsetJobRunner("sensors")
 
 	// Create the basic struct
 	impl := &tempSensorsImpl{
@@ -137,7 +137,7 @@ func (s *tempSensor) processMessage(msg []byte) {
 		s.lastTemp = cooked.Temperature
 		s.lastHumidity = cooked.Humidity
 	} else {
-		log.Errorf("tempSensor: json error: %s", err.Error())
+		log.Errorf("sensors: json error: %s", err.Error())
 	}
 }
 
@@ -193,15 +193,15 @@ func (d *tempSensorsImpl) processTemp(topic string, payload []byte) {
 			sensor.dirty = true
 			sensor.lastTemp = (data.Temperature*9)/5 + 32
 			sensor.lastHumidity = data.Humidity
-			log.Debugf("tempSensor: processTemp: %s %.2f %.0f", topic, sensor.lastTemp, sensor.lastHumidity+0.5)
+			log.Debugf("sensors: processTemp: %s %.2f %.0f", topic, sensor.lastTemp, sensor.lastHumidity+0.5)
 		} else {
-			log.Errorf("tempSensor: processTemp: error=%s", err.Error())
+			log.Errorf("sensors: processTemp: error=%s", err.Error())
 		}
 	}
 }
 
 func (d *tempSensorsImpl) processGroup(index int) {
-	log.Debugf("tempSensors: processGroup: %d", index)
+	log.Debugf("sensors: processGroup: %d", index)
 
 	if index < 0 || index >= len(d.config) {
 		log.Panicf("bad tempSensorGroup index: %d", index)
@@ -227,7 +227,7 @@ func (d *tempSensorsImpl) processGroup(index int) {
 	}
 
 	if len(event) > 0 {
-		log.Infof("tempSensors: event: %s", event)
+		log.Infof("sensors: event: %s", event)
 		go d.bmux.Publish(pubTopic, 0, false, event)
 	}
 }

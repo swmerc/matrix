@@ -37,12 +37,12 @@ type Config struct {
 	// Output to LED matrix, which pulls from many sources (including MQTT)
 	//
 	Matrix struct {
-		Weather      WeatherConfig       `yaml:"weather"`
-		TempSensors  []TempSensorConfig  `yaml:"sensors"`
-		RemoteImages []RemoteImageConfig `yaml:"remote"`
-		LocalImages  []LocalImagesConfig `yaml:"local"`
-		Strings      []StringsConfig     `yaml:"strings"`
-		Mirror       []MirrorConfig      `yaml:"mirror"`
+		Weather      WeatherConfig      `yaml:"weather"`
+		TempSensors  []TempSensorConfig `yaml:"sensors"`
+		RemoteImages RemoteImageConfig  `yaml:"remote"`
+		LocalImages  LocalImagesConfig  `yaml:"local"`
+		Strings      StringsConfig      `yaml:"strings"`
+		Mirror       []MirrorConfig     `yaml:"mirror"`
 	} `yaml:"matrix"`
 }
 

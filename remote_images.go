@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"image"
 	"net/http"
 	"time"
@@ -10,7 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// RemoteImageConfig supports remoteImages or other changing images available via HTTP
+// RemoteImageConfig supports cameras or other changing images available via HTTP
 type RemoteImageConfig struct {
 	Topic   string `yaml:"topic"`
 	Height  int    `yaml:"height"`
@@ -52,34 +51,30 @@ type remoteImageJob struct {
 	outputWidth  int
 }
 
-func initRemoteImages(bmux BrokerMux, cfgs []RemoteImageConfig) {
+func initRemoteImages(bmux BrokerMux, cfg RemoteImageConfig) {
 
-	// Walk the config, making a remoteImageJob for each entry
-	for idx, cfg := range cfgs {
+	runner := newOffsetJobRunner("remote")
 
-		runner := newOffsetJobRunner(fmt.Sprintf("remote%d", idx))
+	for _, source := range cfg.Sources {
 
-		for _, source := range cfg.Sources {
-
-			job := &remoteImageJob{
-				bmux:         bmux,
-				topic:        cfg.Topic,
-				uri:          source.URI,
-				resizeHeight: source.ResizeHeight,
-				resizeWidth:  source.ResizeWidth,
-				startX:       source.StartX,
-				startY:       source.StartY,
-				outputHeight: cfg.Height,
-				outputWidth:  cfg.Width,
-			}
-
-			for _, offset := range source.Offsets {
-				runner.AddJob(offset, job)
-			}
+		job := &remoteImageJob{
+			bmux:         bmux,
+			topic:        cfg.Topic,
+			uri:          source.URI,
+			resizeHeight: source.ResizeHeight,
+			resizeWidth:  source.ResizeWidth,
+			startX:       source.StartX,
+			startY:       source.StartY,
+			outputHeight: cfg.Height,
+			outputWidth:  cfg.Width,
 		}
 
-		runner.Run()
+		for _, offset := range source.Offsets {
+			runner.AddJob(offset, job)
+		}
 	}
+
+	runner.Run()
 }
 
 //

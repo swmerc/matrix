@@ -28,11 +28,6 @@ func runDeviceMgmt(bmux BrokerMux, cfg DeviceMgmtConfig) {
 	}
 
 	//
-	// Figure out where we post/receive stuff
-	//
-	baseTopic := "device/" + cfg.Topic + "/"
-
-	//
 	// Post our LAN IP
 	//
 	if ifaces, err := net.Interfaces(); err == nil {
@@ -49,7 +44,7 @@ func runDeviceMgmt(bmux BrokerMux, cfg DeviceMgmtConfig) {
 						continue
 					}
 					if ip.IsLoopback() == false {
-						t := bmux.Publish(baseTopic+"IP", 1, true, ip.String())
+						t := bmux.Publish(cfg.Topic+"IP", 1, true, ip.String())
 						t.Wait()
 						break
 					}
@@ -61,7 +56,7 @@ func runDeviceMgmt(bmux BrokerMux, cfg DeviceMgmtConfig) {
 	//
 	// Process incoming commands
 	//
-	bmux.Subscribe(baseTopic+"cmd", 0, func(client mqtt.Client, msg mqtt.Message) {
+	bmux.Subscribe(cfg.Topic+"cmd", 0, func(client mqtt.Client, msg mqtt.Message) {
 		payload := string(msg.Payload())
 		log.Infof("command: name=%s", payload)
 
@@ -87,12 +82,12 @@ func runDeviceMgmt(bmux BrokerMux, cfg DeviceMgmtConfig) {
 	ticker := time.NewTicker(time.Hour)
 	uptime := 0
 
-	reportUptime(bmux, baseTopic, uptime)
+	reportUptime(bmux, cfg.Topic, uptime)
 
 	for {
 		select {
 		case <-ticker.C:
-			reportUptime(bmux, baseTopic, uptime)
+			reportUptime(bmux, cfg.Topic, uptime)
 			uptime = uptime + 1
 		}
 	}

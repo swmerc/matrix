@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"math/rand"
 )
 
@@ -17,16 +16,14 @@ type jokeJob struct {
 	cfg  StringsConfig
 }
 
-func initStrings(bmux BrokerMux, cfgs []StringsConfig) {
-	for idx, cfg := range cfgs {
-		if len(cfg.Strings) > 0 && len(cfg.Offsets) > 0 {
-			runner := newOffsetJobRunner(fmt.Sprintf("strings%d", idx))
-			job := &jokeJob{bmux: bmux, cfg: cfg}
-			for _, offset := range cfg.Offsets {
-				runner.AddJob(offset, job)
-			}
-			runner.Run()
+func initStrings(bmux BrokerMux, cfg StringsConfig) {
+	if len(cfg.Strings) > 0 && len(cfg.Offsets) > 0 {
+		runner := newOffsetJobRunner("strings")
+		job := &jokeJob{bmux: bmux, cfg: cfg}
+		for _, offset := range cfg.Offsets {
+			runner.AddJob(offset, job)
 		}
+		runner.Run()
 	}
 }
 

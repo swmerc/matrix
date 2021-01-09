@@ -11,7 +11,7 @@ type StringsConfig struct {
 	Strings []string `yaml:"strings"`
 }
 
-type jokeJob struct {
+type stringJob struct {
 	bmux BrokerMux
 	cfg  StringsConfig
 }
@@ -19,7 +19,7 @@ type jokeJob struct {
 func initStrings(bmux BrokerMux, cfg StringsConfig) {
 	if len(cfg.Strings) > 0 && len(cfg.Offsets) > 0 {
 		runner := newOffsetJobRunner("strings")
-		job := &jokeJob{bmux: bmux, cfg: cfg}
+		job := &stringJob{bmux: bmux, cfg: cfg}
 		for _, offset := range cfg.Offsets {
 			runner.AddJob(offset, job)
 		}
@@ -27,7 +27,7 @@ func initStrings(bmux BrokerMux, cfg StringsConfig) {
 	}
 }
 
-func (j *jokeJob) Run() {
+func (j *stringJob) Run() {
 	// Pick a random joke
 	index := 0
 	if len(j.cfg.Strings) > 0 {

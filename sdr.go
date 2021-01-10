@@ -15,7 +15,7 @@ import (
 type SDRConfig struct {
 	// Publishing
 	Topic    string `yaml:"topic"`
-	Interval int    `yaml:"iterval"`
+	Interval int    `yaml:"interval"`
 	Allow    []struct {
 		Model string `yaml:"model"`
 		ID    int    `yaml:"id"`
@@ -270,11 +270,12 @@ func (sdr *sdrData) emit() bool {
 
 			out, err := json.Marshal(sensor)
 			if err != nil {
-				log.Panicf("sdr: emit: %v", err)
+				log.Errorf("sdr: emit: %v", err)
+				continue
 			}
 
 			topic := sdr.sdrCfg.Topic + strconv.Itoa(sensor.id)
-			log.Infof("sdr: emit: %s: %s", topic, out)
+			log.Debugf("sdr: emit: %s: %s", topic, out)
 
 			// Fire off another goroutine to send since this is blocking consume()
 			go func() {

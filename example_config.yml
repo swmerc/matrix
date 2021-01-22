@@ -1,0 +1,190 @@
+#
+# MQTT broker(s)
+#
+# In this case I have one local and one in the cloud, and I've opted to call
+# them local and cloud.  Local is on my LAN and wide open, while cloud uses
+# TLS along with user/password.  Yes, I should support certs.  No, I don't
+# think it matters for my needs.
+#
+brokers:
+  - name: "local"
+    host: "192.168.1.2"
+    port: 1883
+    client: "pi4"
+  - name: "cloud"
+    client: "pi4"
+    host: "coolcloudserver.com"
+    port: 8883
+    tls: true
+    user: "REDACTED"
+    pass: "REDACTED"
+
+#
+# The device section is used to set up something that listens
+# for commands over MQTT.  I should make this a list of cmdlines
+# for each command, add variables, etc, but this is not github.
+#
+device:
+  topic: "local:device/pi4/"
+  commands:
+    - name: "reboot"
+      cmdline: "/usr/bin/sudo /usr/sbin/reboot"
+
+#
+# sdr is used to set up rtl_433 to publish local temp sensor data to
+# MQTT. The primary value in this over just using rtl_433's MQTT code is
+# that I can rate limit and filter, but it also allows me to send JSON over
+# MQTT.  This means I can write to temperature/id instead of sensor/id/temp,
+# sensor/id/humidity, etc.  Probably evil in the eyes of MQTT purists, but
+# less networking traffic is a win for me.
+#
+# Note that in this case I publish to local:/temperature/id here and the
+# sensors section under matrix pulls that data out and sends it to
+# local:matrix/1/sensors in a different format and at different times.
+#
+sdr:
+  topic: "local:temperature/"
+  interval: 10
+  allow:
+    - model: "AmbientWeather-TX8300"
+      id: 95
+    - model: "Acurite-Tower"
+      id: 3824
+    - model: "Acurite-Tower"
+      id: 4073
+  rtl_433:
+    app: "/usr/local/bin/rtl_433"
+    protocols:
+      - 40
+      - 112
+
+#
+# The matrix section configures how/when data is sent to the LED matrix.  It
+# currently aggregates all of the temp sensors into two groups that displays
+# at the same time the weather report for that area displays, and it adds in
+# some camera footage and dumb jokes.
+#
+# Oh, and I've configured some topic mirroring so that publishing something
+# on cloud:/messaging/1/* ends up getting it to the local LED matrix.  This
+# allows for mobile apps that send messages to the display.
+#
+matrix:
+  sensors:
+    - topic: "local:matrix/1/sensors"
+      offsets:
+        - 0
+        - 30
+      sensors: 
+        - sub: "local:temperature/95"
+          name: "Front"
+        - sub: "local:temperature/3824"
+          name: "Back"
+        - sub: "local:temperature/4073"
+          name: "Garage"
+    - topic: "local:matrix/1/sensors"
+      offsets:
+        - 15
+        - 45
+      sensors:
+        - sub: "cloud:temperature/11455"
+          name: "Kitchen"
+        - sub: "cloud:temperature/3338"
+          name: "Kitchen2"
+        - sub: "cloud:temperature/4395"
+          name: "Living2"
+        - sub: "cloud:temperature/6463"
+          name: "Utility"
+
+  # Weather uses open weather map, and needs an API key.
+  weather:
+    topic: "local:matrix/1/weather"
+    key: "REDACTED"
+    locations: 
+      - zipcode: "FAKEZIP1"
+        offsets: 
+          - 0
+          - 30
+      - zipcode: "FAKEZIP2"
+        offsets: 
+          - 15
+          - 45
+      - zipcode: "90210"
+        offsets: 
+          - 55
+
+  # Remote images are resized and then a 64x32 image is extracted from
+  # the given offset.   These two operations seem to be enough for
+  # what I'm doing.
+  remote:
+    topic: "local:matrix/1/image1"
+    width: 64
+    height: 32
+    sources:
+      - uri: "http://192.168.1.3:8080/stream/snapshot.jpeg?delay_s=10"
+        resizeWidth: 320
+        resizeHeight: 240
+        startX: 143
+        startY: 197
+        offsets:
+          - 0
+          - 12
+          - 24
+          - 36
+          - 48
+      - uri: "http://192.168.1.4:8080/stream/snapshot.jpeg?delay_s=10"
+        resizeWidth: 128
+        resizeHeight: 96
+        startX: 64
+        startY: 64
+        offsets:
+          - 6
+          - 18
+          - 30
+          - 42
+          - 54
+
+  # Local images are just resized.  Since I have access to them, I make sure
+  # that they are the right aspect ratio on the disk and I don't need
+  # to crop.  I probably should merge local/remote, but then I'd also need
+  # to deal with random vs fixed offset, etc.
+  local:
+    topic: "local:matrix/1/image2"
+    width: 64
+    height: 32
+    fixedDelay: 5
+    randDelay: 10
+    sources:
+      - "/home/pi/images/spongebob.jpg"
+      - "/home/pi/images/jinjer.jpg"
+      - "/home/pi/images/babyyoda.jpg"
+
+  # Yup, dad jokes.  This should be random, but it is using the fixed
+  # offset code at the moment.
+  strings:
+    topic: "local:matrix/1/joke"
+    offsets:
+      - 17
+      - 43
+    strings: 
+      - "What do you call a cat with 8 legs that can swim?:An octopuss"
+      - "The swordfish is the best dressed fish:It always looks sharp"
+      - "What is a pig's favorite Shakespeare play?:Hamlet"
+      - "I never understood odorless chemicals:They don't make scents"
+      - "Where does bad light end up?:In prism"
+      - "What is smarter than a talking cat?:A spelling bee"
+      - "Never spell part backwards:IT'S A TRAP!"
+      - "How did the hipster burn his mouth?:He drank his coffee before it was cool"
+      - "What do you call a fake noodle?:An impasta"
+      - "Plateaus are the highest form of flattery"
+      - "How do trees access the internet?:They log on"
+      - "Did you hear about the burglar that fell into the cement mixer?:He's a hardened criminal"
+      -  "Software engineers never go outside:Too many bugs"
+      - "There is something about subraction that doesn't add up"
+      - "Most chairs are satin"
+      - "My recliner and I go WAY back"
+
+  mirror:
+    - sub: "cloud:messaging/message/1"
+      pub: "local:matrix/1/message"
+    - sub: "cloud:messaging/info/1"
+      pub: "local:matrix/1/info"

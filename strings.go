@@ -28,7 +28,7 @@ func initStrings(bmux BrokerMux, cfg StringsConfig) {
 }
 
 func (j *stringJob) Run() {
-	// Pick a random joke
+	// Pick a random string
 	index := 0
 	if len(j.cfg.Strings) > 0 {
 		index = rand.Intn(len(j.cfg.Strings))

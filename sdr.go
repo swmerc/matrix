@@ -87,10 +87,14 @@ func initSDR(bmux BrokerMux, cfg *SDRConfig) {
 		dataChan: make(chan []byte),
 	}
 
+	// See if we even have a topic
+	if len(cfg.Topic) == 0 {
+		return
+	}
+
 	// Fill in the allow map
 	for _, allow := range cfg.Allow {
 		data.addAllowedSensor(allow.Model, allow.ID)
-
 	}
 
 	// Fire up the goroutine that manages rtl_433

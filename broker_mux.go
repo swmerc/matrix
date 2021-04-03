@@ -56,9 +56,20 @@ func newBrokerMux(cfg []BrokerConfig) BrokerMux {
 		opts.OnConnect = connectHandler
 		opts.OnConnectionLost = connectLostHandler
 
+		//
+		// We block if any of the brokers are down.  They can bounce all they want after we connect, we can't
+		// start until they are up.  Tnis is not the end of the world since it is not like we can do a ton
+		// without a network.  The only downside is that we hang here if we have a misconfigured MQTT
+		// broker.
+		//
 		client := mqtt.NewClient(opts)
-		if token := client.Connect(); token.Wait() && token.Error() != nil {
-			panic(token.Error())
+		for true {
+			if token := client.Connect(); token.Wait() && token.Error() != nil {
+				log.Infof("bmux: error connecting to broker %s at start: %s", broker.Name, token.Error())
+				time.Sleep(time.Duration(1) * time.Minute)
+			} else {
+				break
+			}
 		}
 
 		log.Infof("bmux: new broker: %s=%s:%d", broker.Name, broker.Host, broker.Port)
@@ -70,12 +81,12 @@ func newBrokerMux(cfg []BrokerConfig) BrokerMux {
 
 var connectHandler mqtt.OnConnectHandler = func(client mqtt.Client) {
 	r := client.OptionsReader()
-	log.Infof("MQTT: connected: %s\n", r.ClientID())
+	log.Infof("MQTT: connected: %s", r.ClientID())
 }
 
 var connectLostHandler mqtt.ConnectionLostHandler = func(client mqtt.Client, err error) {
 	r := client.OptionsReader()
-	log.Infof("MQTT: disconnected: %s: %v\n", r.ClientID(), err)
+	log.Infof("MQTT: disconnected: %s: %v", r.ClientID(), err)
 }
 
 //

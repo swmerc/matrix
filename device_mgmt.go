@@ -64,6 +64,7 @@ func runDeviceMgmt(bmux BrokerMux, cfg DeviceMgmtConfig) {
 		for _, command := range cfg.Commands {
 			if strings.Compare(command.Name, payload) == 0 {
 				go func() {
+					log.Infof("command: %s", command.CmdLine)
 					execCommand := exec.Command("/bin/bash", "-c", command.CmdLine)
 					raw, err := execCommand.CombinedOutput()
 					if err != nil {

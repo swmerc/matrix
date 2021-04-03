@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
@@ -80,6 +81,7 @@ func main() {
 	}
 
 	if cfg.Debug == true {
+		log.Infof("DEBUG")
 		log.SetLevel(log.DebugLevel)
 	}
 
@@ -99,4 +101,9 @@ func main() {
 
 	// Run the device management code, which does not return
 	runDeviceMgmt(bmux, cfg.DeviceMgmt)
+
+	// Sit and spin
+	for true {
+		time.Sleep(time.Minute)
+	}
 }

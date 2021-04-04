@@ -6,34 +6,19 @@ import (
 
 // StringsConfig supports a list of Strings to publish to a topic. One will be randomly selected at every offset.
 type StringsConfig struct {
-	Topic   string   `yaml:"topic"`
-	Offsets []int    `yaml:"offsets"`
-	Strings []string `yaml:"strings"`
-}
-
-type stringJob struct {
-	bmux BrokerMux
-	cfg  StringsConfig
+	Topic   string       `yaml:"topic"`
+	Jobs    JobRunnerCfg `yaml:"jobs"`
+	Strings []string     `yaml:"strings"`
 }
 
 func initStrings(bmux BrokerMux, cfg StringsConfig) {
-	if len(cfg.Strings) > 0 && len(cfg.Offsets) > 0 {
-		runner := newOffsetJobRunner("strings")
-		job := &stringJob{bmux: bmux, cfg: cfg}
-		for _, offset := range cfg.Offsets {
-			runner.AddJob(offset, job)
-		}
-		runner.Run()
+	if len(cfg.Topic) > 0 && len(cfg.Strings) > 0 {
+		NewJobRunner("strings", cfg.Jobs, func() {
+			index := 0
+			if len(cfg.Strings) > 0 {
+				index = rand.Intn(len(cfg.Strings))
+			}
+			bmux.Publish(cfg.Topic, 0, false, cfg.Strings[index])
+		}).Run()
 	}
-}
-
-func (j *stringJob) Run() {
-	// Pick a random string
-	index := 0
-	if len(j.cfg.Strings) > 0 {
-		index = rand.Intn(len(j.cfg.Strings))
-	}
-
-	// Send it
-	j.bmux.Publish(j.cfg.Topic, 0, false, j.cfg.Strings[index])
 }

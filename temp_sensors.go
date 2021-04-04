@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	log "github.com/sirupsen/logrus"
@@ -11,8 +12,8 @@ import (
 // TempSensorConfig supports reading in sensor data from a bunch of topics (the "subs") and
 // posting a single string to another topic at the given offsets.
 type TempSensorConfig struct {
-	Topic   string `yaml:"topic"`
-	Offsets []int  `yaml:"offsets"`
+	Topic   string       `yaml:"topic"`
+	Jobs    JobRunnerCfg `yaml:"jobs"`
 	Sensors []struct {
 		Sub  string `yaml:"sub"`
 		Name string `yaml:"name"`
@@ -37,18 +38,12 @@ type tempSensorsImpl struct {
 
 	// Channel for kicking off a group report
 	runChan chan int
-
-	// offsetJobRunner
-	runner offsetJobRunner
 }
 
 //
 // Init
 //
 func initTempSensors(bmux BrokerMux, cfgs []TempSensorConfig) {
-
-	// offsetJobRunner so this all gets scheduled at the right wall clock time
-	runner := newOffsetJobRunner("sensors")
 
 	// Create the basic struct
 	impl := &tempSensorsImpl{
@@ -57,20 +52,22 @@ func initTempSensors(bmux BrokerMux, cfgs []TempSensorConfig) {
 		tempChan:    make(chan mqtt.Message),
 		runChan:     make(chan int),
 		tempSensors: make(map[string]*tempSensor),
-		runner:      runner,
 	}
+
+	// Create an array of pointers to job runners we can use to start all of them after we start
+	// our main goroutine
+	runners := make([]JobRunner, 0, 16)
 
 	// Walk the sensorGroups and make actual sensors and jobs for everything so we can track changes.
 	for groupIdx, group := range cfgs {
 		log.Debugf("tempSensors: init group: %s:%d", group.Topic, groupIdx)
 
-		// Add jobs.  These just send a group index to a channel to move the request
-		// to another goroutine.  Having all temp processing in the same goroutine
-		// is a lot easier than dealing with locking, and channels are fun, so...
-		for _, offset := range group.Offsets {
-			j := &tempSensorJob{runChan: &impl.runChan, index: groupIdx}
-			runner.AddJob(offset, j)
-		}
+		// Create the runner, creating a copy of the groupIdx for the closure
+		idx := groupIdx
+		runner := NewJobRunner("sensors-"+strconv.Itoa(groupIdx), group.Jobs, func() {
+			impl.runChan <- idx
+		})
+		runners = append(runners, runner)
 
 		// Add tracking for the actual sensors we want to monitor, and subscribe to each.
 		// this is a bit of a pain compared to subscribing to "temperature/blah", but I
@@ -93,20 +90,13 @@ func initTempSensors(bmux BrokerMux, cfgs []TempSensorConfig) {
 		}
 	}
 
+	// Start our goroutine
 	impl.Run()
-}
 
-//
-// tempSensorJob is just something to pass to the offsetJobRunner so it
-// can kick our thread at the proper times.
-//
-type tempSensorJob struct {
-	runChan *chan int
-	index   int
-}
-
-func (job *tempSensorJob) Run() {
-	*job.runChan <- job.index
+	// Start all of the job runners
+	for _, r := range runners {
+		r.Run()
+	}
 }
 
 //
@@ -160,10 +150,6 @@ func (s *tempSensor) getHumidity() float32 {
 // we don't need to lock anything.
 //
 func (d *tempSensorsImpl) Run() {
-	// Fire up the offsetJobRunner, which signals us via runChan.
-	d.runner.Run()
-
-	// Loop
 	go d.loop()
 }
 

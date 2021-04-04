@@ -3,7 +3,6 @@ package main
 import (
 	"image"
 	"math/rand"
-	"time"
 
 	log "github.com/sirupsen/logrus"
 
@@ -12,23 +11,19 @@ import (
 
 // LocalImagesConfig supports a single dest and a list of image to randomly publish to that topic
 type LocalImagesConfig struct {
-	Topic      string   `yaml:"topic"`
-	Height     int      `yaml:"height"`
-	Width      int      `yaml:"width"`
-	FixedDelay int      `yaml:"fixedDelay"`
-	RandDelay  int      `yaml:"randDelay"`
-	Sources    []string `yaml:"sources"`
-}
-
-type localImageImpl struct {
-	bmux BrokerMux
-	cfg  LocalImagesConfig
+	Topic   string       `yaml:"topic"`
+	Jobs    JobRunnerCfg `yaml:"jobs"`
+	Height  int          `yaml:"height"`
+	Width   int          `yaml:"width"`
+	Sources []string     `yaml:"sources"`
 }
 
 func initLocalImages(bmux BrokerMux, cfg LocalImagesConfig) {
 	if len(cfg.Topic) > 0 && len(cfg.Sources) > 0 {
-		i := &localImageImpl{bmux: bmux, cfg: cfg}
-		go i.loop()
+		NewJobRunner("images-local", cfg.Jobs, func() {
+			index := rand.Intn(len(cfg.Sources))
+			publishLocalImage(bmux, cfg.Topic, cfg.Sources[index], cfg.Height, cfg.Width)
+		}).Run()
 	}
 }
 
@@ -53,48 +48,19 @@ func ImageToMatrixBytes(img *image.NRGBA) []byte {
 	return output
 }
 
-func (i *localImageImpl) loop() {
-
-	for true {
-		// Delay until the next time
-		delay := i.cfg.FixedDelay
-
-		if i.cfg.RandDelay > 0 {
-			delay = delay + rand.Intn(i.cfg.RandDelay)
-		}
-
-		if delay < 0 {
-			delay = 2
-		}
-
-		log.Debugf("images: sleeping %d minutes", delay)
-		time.Sleep(time.Duration(delay) * time.Minute)
-
-		//
-		// Pick a random image
-		//
-		index := 0
-		if len(i.cfg.Sources) > 1 {
-			index = rand.Intn(len(i.cfg.Sources))
-		}
-
-		//
-		// Process it
-		//
-		img, err := imaging.Open(i.cfg.Sources[index])
-		if err != nil {
-			log.Errorf("images: %s: open: %v", i.cfg.Sources[index], err)
-			continue
-		}
-
-		final := imaging.Resize(img, i.cfg.Width, i.cfg.Height, imaging.Lanczos)
-		if err != nil {
-			log.Errorf("images: %s: resize: %v", i.cfg.Sources[index], err)
-			continue
-		}
-
-		log.Infof("images: posting %s to %s", i.cfg.Sources[index], i.cfg.Topic)
-		i.bmux.Publish(i.cfg.Topic, 0, false, ImageToMatrixBytes(final))
+func publishLocalImage(bmux BrokerMux, topic string, source string, height int, width int) {
+	img, err := imaging.Open(source)
+	if err != nil {
+		log.Errorf("images-local: %s: open: %v", source, err)
+		return
 	}
 
+	final := imaging.Resize(img, width, height, imaging.Lanczos)
+	if err != nil {
+		log.Errorf("images-local: %s: resize: %v", source, err)
+		return
+	}
+
+	log.Infof("images-local: posting %s to %s", source, topic)
+	bmux.Publish(topic, 0, false, ImageToMatrixBytes(final))
 }

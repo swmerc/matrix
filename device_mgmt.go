@@ -1,7 +1,6 @@
 package main
 
 import (
-	"net"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -28,32 +27,6 @@ func runDeviceMgmt(bmux BrokerMux, cfg DeviceMgmtConfig) {
 	}
 
 	//
-	// Post our LAN IP
-	//
-	if ifaces, err := net.Interfaces(); err == nil {
-		for _, i := range ifaces {
-			if addrs, err := i.Addrs(); err == nil {
-				for _, addr := range addrs {
-					var ip net.IP
-					switch v := addr.(type) {
-					case *net.IPNet:
-						ip = v.IP
-					case *net.IPAddr:
-						ip = v.IP
-					default:
-						continue
-					}
-					if ip.IsLoopback() == false {
-						t := bmux.Publish(cfg.Topic+"IP", 1, true, ip.String())
-						t.Wait()
-						break
-					}
-				}
-			}
-		}
-	}
-
-	//
 	// Process incoming commands
 	//
 	bmux.Subscribe(cfg.Topic+"cmd", 0, func(client mqtt.Client, msg mqtt.Message) {
@@ -64,13 +37,11 @@ func runDeviceMgmt(bmux BrokerMux, cfg DeviceMgmtConfig) {
 		for _, command := range cfg.Commands {
 			if strings.Compare(command.Name, payload) == 0 {
 				go func() {
-					log.Infof("command: %s", command.CmdLine)
 					execCommand := exec.Command("/bin/bash", "-c", command.CmdLine)
-					raw, err := execCommand.CombinedOutput()
+					_, err := execCommand.CombinedOutput()
 					if err != nil {
 						log.Errorf("command: error=%v", err)
 					}
-					log.Infof("command: result=%s", string(raw))
 				}()
 				break
 			}

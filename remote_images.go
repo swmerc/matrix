@@ -3,6 +3,7 @@ package main
 import (
 	"image"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/disintegration/imaging"
@@ -15,108 +16,90 @@ type RemoteImageConfig struct {
 	Height  int    `yaml:"height"`
 	Width   int    `yaml:"width"`
 	Sources []struct {
-		URI          string `yaml:"uri"`
-		Offsets      []int  `yaml:"offsets"`
-		ResizeWidth  int    `yaml:"resizeWidth"`
-		ResizeHeight int    `yaml:"resizeHeight"`
-		StartX       int    `yaml:"startX"`
-		StartY       int    `yaml:"startY"`
+		URI          string       `yaml:"uri"`
+		Jobs         JobRunnerCfg `yaml:"jobs"`
+		ResizeWidth  int          `yaml:"resizeWidth"`
+		ResizeHeight int          `yaml:"resizeHeight"`
+		StartX       int          `yaml:"startX"`
+		StartY       int          `yaml:"startY"`
 	} `yaml:"sources"`
 }
 
-//
-// Job that is runnable via offsetJobRunner directly.  I could save some space and
-// assume that all of the topics and URIs are the same, but I hope to extend this
-// at some point (perhaps with different job runners for different topics).  It is
-// not wasting a ton of space, so I'm not sure I care anyway.
-//
-type remoteImageJob struct {
-	// Publish support
-	bmux  BrokerMux
-	topic string
-
-	// Home of the image we want
-	uri string
-
-	// Resize to this
+// FIXME: I eventually want to share the processing chain between local and remote, with the only
+//        real difference being the source of the content.  Local images are currently all
+//        the proper size, but whatever.
+type croppedImage struct {
 	resizeHeight int
 	resizeWidth  int
-
-	// then start grabbing data here
-	startX int
-	startY int
-
-	// and limit to this output size
-	outputHeight int
-	outputWidth  int
+	startX       int
+	startY       int
+	height       int
+	width        int
 }
 
 func initRemoteImages(bmux BrokerMux, cfg RemoteImageConfig) {
-
-	runner := newOffsetJobRunner("remote")
-
-	for _, source := range cfg.Sources {
-
-		job := &remoteImageJob{
-			bmux:         bmux,
-			topic:        cfg.Topic,
-			uri:          source.URI,
-			resizeHeight: source.ResizeHeight,
-			resizeWidth:  source.ResizeWidth,
-			startX:       source.StartX,
-			startY:       source.StartY,
-			outputHeight: cfg.Height,
-			outputWidth:  cfg.Width,
-		}
-
-		for _, offset := range source.Offsets {
-			runner.AddJob(offset, job)
-		}
+	if len(cfg.Topic) <= 0 {
+		return
 	}
 
-	runner.Run()
+	for sourceIndex, source := range cfg.Sources {
+		remoteSource := source
+		NewJobRunner("images-remote-"+strconv.Itoa(sourceIndex), source.Jobs, func() {
+			img := &croppedImage{
+				resizeHeight: remoteSource.ResizeHeight,
+				resizeWidth:  remoteSource.ResizeWidth,
+				startX:       remoteSource.StartX,
+				startY:       remoteSource.StartY,
+				height:       cfg.Height,
+				width:        cfg.Width,
+			}
+			publishRemoteImage(bmux, cfg.Topic, remoteSource.URI, img)
+		}).Run()
+	}
 }
 
 //
 // This is where all of the magic happens
 //
-func (c *remoteImageJob) Run() {
+func publishRemoteImage(bmux BrokerMux, topic string, uri string, img *croppedImage) {
 	// Read the data
 	var myClient = &http.Client{Timeout: 15 * time.Second}
 
-	rawResp, err := myClient.Get(c.uri)
+	rawResp, err := myClient.Get(uri)
 	if err != nil {
-		log.Errorf("remoteImage: GET error: %s: %s", c.uri, err.Error())
+		log.Errorf("remoteImage: GET error: %s: %s", uri, err.Error())
 		return
 	}
 	defer rawResp.Body.Close()
 
 	if rawResp.StatusCode != http.StatusOK {
-		log.Errorf("remoteImage: GET bad response: %s: %d", c.uri, rawResp.StatusCode)
+		log.Errorf("remoteImage: GET bad response: %s: %d", uri, rawResp.StatusCode)
 		return
 	}
 
 	// Turn it into an image
 	orig, err := imaging.Decode(rawResp.Body)
 	if err != nil {
-		log.Errorf("remoteImage: bad decode: %s: %v", c.uri, err)
+		log.Errorf("remoteImage: bad decode: %s: %v", uri, err)
 		return
 	}
 
 	// Resize
-	scaled := imaging.Resize(orig, c.resizeWidth, c.resizeHeight, imaging.Lanczos)
+	scaled := imaging.Resize(orig, img.resizeWidth, img.resizeHeight, imaging.Lanczos)
 
 	// Crop
-	rect := image.Rectangle{Min: image.Pt(c.startX, c.startY), Max: image.Pt((c.startX + c.outputWidth), (c.startY + c.outputHeight))}
+	rect := image.Rectangle{
+		Min: image.Pt(img.startX, img.startY),
+		Max: image.Pt((img.startX + img.width), (img.startY + img.height))}
 	cropped := imaging.Crop(scaled, rect)
 
 	// Sanity check
 	finalSize := cropped.Bounds()
-	if finalSize.Max.X != c.outputWidth || finalSize.Max.Y != c.outputHeight {
-		log.Errorf("remoteImage: borked: %s: %v", c.uri, finalSize)
+	if finalSize.Max.X != img.width || finalSize.Max.Y != img.height {
+		log.Errorf("remoteImage: borked: %s: %v", uri, finalSize)
 	}
 
 	// Publish whatever we have.
-	log.Infof("remoteImage: posting to %s", c.topic)
-	c.bmux.Publish(c.topic, 0, false, ImageToMatrixBytes(cropped))
+	log.Infof("remoteImage: posting to %s", topic)
+	bmux.Publish(topic, 0, false, ImageToMatrixBytes(cropped))
 }

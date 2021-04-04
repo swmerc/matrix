@@ -14,42 +14,27 @@ type WeatherConfig struct {
 	Topic     string `yaml:"topic"`
 	Key       string `yaml:"key"`
 	Locations []struct {
-		Zipcode string `yaml:"zipcode"`
-		Offsets []int  `yaml:"offsets"`
+		Zipcode string       `yaml:"zipcode"`
+		Jobs    JobRunnerCfg `yaml:"jobs"`
 	} `yaml:"locations"`
 }
 
-type weatherCommon struct {
-	bmux  BrokerMux
-	topic string
-	appid string
-}
-
-type weatherOffsetJob struct {
-	common  *weatherCommon
-	zipcode string
-}
-
 func initWeather(bmux BrokerMux, cfg WeatherConfig) {
-
-	// General information
-	common := &weatherCommon{
-		bmux:  bmux,
-		topic: cfg.Topic,
-		appid: cfg.Key,
+	if len(cfg.Topic) <= 0 {
+		return
 	}
 
-	// Add offset jobs
-	c := newOffsetJobRunner("weather")
+	if len(cfg.Key) <= 0 {
+		log.Errorf("weather: empty key")
+	}
+
 	for _, location := range cfg.Locations {
-		for _, offset := range location.Offsets {
-			j := &weatherOffsetJob{zipcode: location.Zipcode, common: common}
-			c.AddJob(offset, j)
-		}
+		zipcode := location.Zipcode
+		runner := NewJobRunner("weather"+"-"+location.Zipcode, location.Jobs, func() {
+			reportWeather(bmux, cfg.Topic, cfg.Key, zipcode)
+		})
+		runner.Run()
 	}
-
-	// Fire off the offsetJob goroutine
-	c.Run()
 }
 
 type weatherData struct {
@@ -67,14 +52,14 @@ type weatherData struct {
 	} `json:"wind"`
 }
 
-func (j *weatherOffsetJob) Run() {
+func reportWeather(bmux BrokerMux, topic string, key string, zipcode string) {
 	var myClient = &http.Client{Timeout: 10 * time.Second}
 	var myResp weatherData
 
 	//
 	// Read it
 	//
-	uri := fmt.Sprintf("http://api.openweathermap.org/data/2.5/weather?zip=%s&APPID=%s&units=imperial", j.zipcode, j.common.appid)
+	uri := fmt.Sprintf("http://api.openweathermap.org/data/2.5/weather?zip=%s&APPID=%s&units=imperial", zipcode, key)
 	rawResp, err := myClient.Get(uri)
 	if err != nil {
 		log.Errorf("weather: GET error: %s", err.Error())
@@ -110,11 +95,11 @@ func (j *weatherOffsetJob) Run() {
 		conditions = conditions + c.Description
 	}
 
-	event := fmt.Sprintf("%s is %.0f\xB0 with %s and %.0f MPH wind", j.zipcode, temp, conditions, wind)
+	event := fmt.Sprintf("%s is %.0f\xB0 with %s and %.0f MPH wind", zipcode, temp, conditions, wind)
 
 	//
 	// Publish it
 	//
 	log.Infof("weather: %s", event)
-	j.common.bmux.Publish(j.common.topic, 0, false, event)
+	bmux.Publish(topic, 0, false, event)
 }

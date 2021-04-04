@@ -66,14 +66,14 @@ sdr:
 #
 # Oh, and I've configured some topic mirroring so that publishing something
 # on cloud:/messaging/1/* ends up getting it to the local LED matrix.  This
-# allows for mobile apps that send messages to the display.
+# allows for mobile apps that send messages to the display without being on 
+# the LAN
 #
 matrix:
   sensors:
     - topic: "local:matrix/1/sensors"
-      offsets:
-        - 0
-        - 30
+      jobs:
+        everyInterval: 30
       sensors: 
         - sub: "local:temperature/95"
           name: "Front"
@@ -82,9 +82,9 @@ matrix:
         - sub: "local:temperature/4073"
           name: "Garage"
     - topic: "local:matrix/1/sensors"
-      offsets:
-        - 15
-        - 45
+      jobs:
+        everyInterval: 30
+        everyStart: 15
       sensors:
         - sub: "cloud:temperature/11455"
           name: "Kitchen"
@@ -101,16 +101,16 @@ matrix:
     key: "REDACTED"
     locations: 
       - zipcode: "FAKEZIP1"
-        offsets: 
-          - 0
-          - 30
+        jobs:
+          everyInterval: 30
       - zipcode: "FAKEZIP2"
-        offsets: 
-          - 15
-          - 45
+        jobs:
+          everyInterval: 30
+          everyStart: 15
       - zipcode: "90210"
-        offsets: 
-          - 55
+        jobs:
+          offsets: 
+            - 55
 
   # Remote images are resized and then a 64x32 image is extracted from
   # the given offset.   These two operations seem to be enough for
@@ -125,23 +125,16 @@ matrix:
         resizeHeight: 240
         startX: 143
         startY: 197
-        offsets:
-          - 0
-          - 12
-          - 24
-          - 36
-          - 48
+        jobs:
+          everyInterval: 12
       - uri: "http://192.168.1.4:8080/stream/snapshot.jpeg?delay_s=10"
         resizeWidth: 128
         resizeHeight: 96
         startX: 64
         startY: 64
-        offsets:
-          - 6
-          - 18
-          - 30
-          - 42
-          - 54
+        jobs:
+          everyInterval: 12
+          everyStart: 6
 
   # Local images are just resized.  Since I have access to them, I make sure
   # that they are the right aspect ratio on the disk and I don't need
@@ -151,20 +144,20 @@ matrix:
     topic: "local:matrix/1/image2"
     width: 64
     height: 32
-    fixedDelay: 5
-    randDelay: 10
+    jobs:
+      randMin: 5
+      randMax: 15
     sources:
       - "/home/pi/images/spongebob.jpg"
       - "/home/pi/images/jinjer.jpg"
       - "/home/pi/images/babyyoda.jpg"
 
-  # Yup, dad jokes.  This should be random, but it is using the fixed
-  # offset code at the moment.
+  # Yup, dad jokes every 10-30 minutes
   strings:
     topic: "local:matrix/1/joke"
-    offsets:
-      - 17
-      - 43
+    jobs:
+      randMin: 10
+      randMax: 30
     strings: 
       - "What do you call a cat with 8 legs that can swim?:An octopuss"
       - "The swordfish is the best dressed fish:It always looks sharp"

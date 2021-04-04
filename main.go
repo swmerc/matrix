@@ -99,7 +99,7 @@ func main() {
 	initStrings(bmux, cfg.Matrix.Strings)
 	initMirror(bmux, cfg.Matrix.Mirror)
 
-	// Run the device management code, which does not return
+	// Run the device management code
 	runDeviceMgmt(bmux, cfg.DeviceMgmt)
 
 	// Sit and spin

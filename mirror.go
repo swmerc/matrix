@@ -14,6 +14,7 @@ type MirrorConfig struct {
 
 func initMirror(bmux BrokerMux, cfg []MirrorConfig) {
 	for _, m := range cfg {
+		m := m
 		log.Infof("mirror: %s -> %s", m.Sub, m.Pub)
 		t := bmux.Subscribe(m.Sub, 0, func(client mqtt.Client, msg mqtt.Message) {
 			log.Debugf("mirror: processing %s", m.Sub)

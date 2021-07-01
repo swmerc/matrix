@@ -30,10 +30,9 @@ func initWeather(bmux BrokerMux, cfg WeatherConfig) {
 
 	for _, location := range cfg.Locations {
 		zipcode := location.Zipcode
-		runner := NewJobRunner("weather"+"-"+location.Zipcode, location.Jobs, func() {
+		NewJobRunner("weather"+"-"+location.Zipcode, location.Jobs, func() {
 			reportWeather(bmux, cfg.Topic, cfg.Key, zipcode)
-		})
-		runner.Run()
+		}).Run()
 	}
 }
 

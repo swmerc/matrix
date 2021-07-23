@@ -237,7 +237,6 @@ func (sdr *sdrData) consume(payload []byte) {
 		sensor.WindSpeed = 0.0
 		sensor.WindDir = 0.0
 		sensor.Rain = 0.0
-		sensor.dirty = true
 	}
 
 	//
@@ -245,12 +244,15 @@ func (sdr *sdrData) consume(payload []byte) {
 	//
 	if data.TemperatureC != 0 {
 		sensor.Temperature = data.TemperatureC
+		sensor.dirty = true
 	}
 	if data.TemperatureF != 0 {
 		sensor.Temperature = (data.TemperatureF - 32.0) * (5.0 / 9.0)
+		sensor.dirty = true
 	}
 	if data.Humidity != 0 {
 		sensor.Humidity = data.Humidity
+		sensor.dirty = true
 	}
 	if data.WindSpeed != 0 && data.WindDir != 0 {
 		sensor.WindSpeed = data.WindSpeed

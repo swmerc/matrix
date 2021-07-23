@@ -31,6 +31,8 @@ type SDRConfig struct {
 	} `yaml:"rtl_433"`
 }
 
+const EmptySensorValue = -999
+
 // Incoming raw temp data from rtl_433
 type weatherSensorSDR struct {
 	Model string `json:"model"`
@@ -45,6 +47,19 @@ type weatherSensorSDR struct {
 	Rain      float32 `json:"rain_mm,omitempty"`
 }
 
+func createWeatherSensorSDR() weatherSensorSDR {
+	var data weatherSensorSDR
+	data.Model = "Bass-o-matic"
+	data.ID = 0
+	data.TemperatureC = EmptySensorValue
+	data.TemperatureF = EmptySensorValue
+	data.Humidity = EmptySensorValue
+	data.WindSpeed = EmptySensorValue
+	data.WindDir = EmptySensorValue
+	data.Rain = EmptySensorValue
+	return data
+}
+
 // Outgoing data to MQTT
 type weatherSensorDataMQTT struct {
 	dirty bool
@@ -55,6 +70,64 @@ type weatherSensorDataMQTT struct {
 	WindSpeed   float32 `json:"windSpeed,omitempty"`
 	WindDir     float32 `json:"windDir,omitempty"`
 	Rain        float32 `json:"rain,omitempty"`
+}
+
+func createWeatherSensorMQTT(id int) *weatherSensorDataMQTT {
+	sensor := &weatherSensorDataMQTT{id: id, dirty: false}
+	sensor.reset()
+	return sensor
+}
+
+func (sensor *weatherSensorDataMQTT) reset() {
+	sensor.Temperature = EmptySensorValue
+	sensor.Humidity = 0
+	sensor.WindSpeed = 0
+	sensor.WindDir = 0
+	sensor.Rain = 0
+}
+
+func (sensor *weatherSensorDataMQTT) update(incomingData weatherSensorSDR) {
+	if !sensor.dirty {
+		sensor.reset()
+	}
+
+	if incomingData.TemperatureC != EmptySensorValue {
+		sensor.Temperature = incomingData.TemperatureC
+		sensor.dirty = true
+	}
+	if incomingData.TemperatureF != EmptySensorValue {
+		sensor.Temperature = (incomingData.TemperatureF - 32.0) * (5.0 / 9.0)
+		sensor.dirty = true
+	}
+	if incomingData.Humidity != EmptySensorValue {
+		sensor.Humidity = incomingData.Humidity
+		sensor.dirty = true
+	}
+	if incomingData.WindSpeed != EmptySensorValue && incomingData.WindDir != EmptySensorValue {
+		sensor.WindSpeed = incomingData.WindSpeed
+		sensor.WindDir = incomingData.WindDir
+		sensor.dirty = true
+	}
+	if incomingData.Rain != EmptySensorValue {
+		sensor.Rain = incomingData.Rain
+		sensor.dirty = true
+	}
+
+	if sensor.dirty {
+		log.Debugf("dirty: %v", sensor)
+	}
+}
+
+func (sensor *weatherSensorDataMQTT) shouldEmit() bool {
+	log.Debugf("shouldEmit: %v", sensor)
+
+	dirty := sensor.dirty
+	sensor.dirty = false
+	if dirty && sensor.Temperature != EmptySensorValue {
+		log.Debugf("shouldEmit: true")
+		return true
+	}
+	return false
 }
 
 // sdrData just wraps all of the data.  Fancy.
@@ -205,62 +278,32 @@ func (sdr *sdrData) runRTL433() {
 // to be JSON in a format we know, but trust no one.
 //
 func (sdr *sdrData) consume(payload []byte) {
-	var data weatherSensorSDR
+	incomingData := createWeatherSensorSDR()
 
 	// Parse the JSON
-	if err := json.Unmarshal(payload, &data); err != nil {
-		log.Infof("sdr: consume: %v: %v", err, data)
+	if err := json.Unmarshal(payload, &incomingData); err != nil {
+		log.Infof("sdr: consume: %v: %v", err, incomingData)
 	}
 
 	// See if we even care
-	if sdr.sensorAllowed(data) == false {
+	if sdr.sensorAllowed(incomingData) == false {
 		return
 	}
 
-	log.Debugf("sdr: consume: %v", data)
+	log.Debugf("sdr: consume: %v", incomingData)
 
 	// Create a hash.  This doesn't need to be that fancy given the low sensor count, and even
 	// using the ID should be good enough since we're already in a world of hurt if these overlap.
-	hash := fmt.Sprintf("%s:%d", data.Model, data.ID)
+	hash := fmt.Sprintf("%s:%d", incomingData.Model, incomingData.ID)
 
 	// Create the sensor if it is missing
 	sensor, ok := sdr.sensors[hash]
 	if ok != true {
-		sensor = &weatherSensorDataMQTT{id: data.ID, dirty: false}
+		sensor = createWeatherSensorMQTT(incomingData.ID)
 		sdr.sensors[hash] = sensor
 	}
 
-	// Clear before adding new data
-	if sensor.dirty == false {
-		sensor.Temperature = 0.0
-		sensor.Humidity = 0.0
-		sensor.WindSpeed = 0.0
-		sensor.WindDir = 0.0
-		sensor.Rain = 0.0
-	}
-
-	//
-	// There has to be an easier way to do this...
-	//
-	if data.TemperatureC != 0 {
-		sensor.Temperature = data.TemperatureC
-		sensor.dirty = true
-	}
-	if data.TemperatureF != 0 {
-		sensor.Temperature = (data.TemperatureF - 32.0) * (5.0 / 9.0)
-		sensor.dirty = true
-	}
-	if data.Humidity != 0 {
-		sensor.Humidity = data.Humidity
-		sensor.dirty = true
-	}
-	if data.WindSpeed != 0 && data.WindDir != 0 {
-		sensor.WindSpeed = data.WindSpeed
-		sensor.WindDir = data.WindDir
-	}
-	if data.Rain != 0 {
-		sensor.Rain = data.Rain
-	}
+	sensor.update(incomingData)
 }
 
 //
@@ -271,8 +314,7 @@ func (sdr *sdrData) emit() bool {
 
 	for _, sensor := range sdr.sensors {
 
-		if sensor.dirty {
-			sensor.dirty = false
+		if sensor.shouldEmit() {
 
 			out, err := json.Marshal(sensor)
 			if err != nil {

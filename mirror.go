@@ -14,6 +14,7 @@ type MirrorConfig struct {
 
 func initMirror(bmux BrokerMux, cfg []MirrorConfig) {
 	for _, m := range cfg {
+		m := m
 		log.Infof("mirror: %s -> %s", m.Sub, m.Pub)
 
 		m_copy := m // Make a local copy so we get the right object in the closure
